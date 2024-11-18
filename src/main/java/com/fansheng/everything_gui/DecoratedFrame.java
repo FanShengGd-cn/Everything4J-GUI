@@ -12,6 +12,8 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -21,12 +23,16 @@ import java.util.concurrent.CompletableFuture;
  */
 
 public class DecoratedFrame extends JFrame {
+    public static final Desktop desktop = Desktop.getDesktop();
+    public static final String SPLIT_SPACE = "     ";
 
-    private JList<String> resultList;
+    private ProcessBuilder pb = new ProcessBuilder();
+
+    private JList<Object> resultList;
 
     private JTextField jTextField;
 
-    private DefaultListModel<String> listModel = new DefaultListModel<>();
+    private DefaultListModel<Object> listModel = new DefaultListModel<>();
 
     private Container container = this.getContentPane();
 
@@ -80,13 +86,42 @@ public class DecoratedFrame extends JFrame {
                     JFrame ancestor = (JFrame) SwingUtilities.getWindowAncestor(e.getComponent());
                     ancestor.dispose();
                 }
+                case 8: {
+                    // 退格键
+                    if (focusedComponent == resultList) {
+                        SwingUtilities.invokeLater(jTextField::requestFocusInWindow);
+                    }
+                    break;
+                }
                 case 10: {
                     // 回车键 控制台启动选择项
+//                    System.out.println(listModel.get(resultList.getSelectedIndex()));
+                    try {
+                        desktop.open(new File(((String)listModel.get(resultList.getSelectedIndex())).split(SPLIT_SPACE)[1]));
+                    } catch (IOException ex) {
+                        throw new RuntimeException(ex);
+                    }
                     break;
                 }
             }
         }
     };
+    private void addInResultList(List<String> result){
+        if (!result.isEmpty()) {
+            listModel.removeAllElements();
+            result.parallelStream().forEach(x->{
+                String[] split = x.split("\\\\");
+                String content;
+                if(split.length > 1){
+                    content = split[split.length-1];
+                }else{
+                    content = x;
+                }
+                listModel.addElement(content + SPLIT_SPACE + x);
+            });
+
+        }
+    }
 
     public DecoratedFrame() {
         jTextField = new JTextField("", 1);
@@ -125,10 +160,7 @@ public class DecoratedFrame extends JFrame {
                 runningFuture = CompletableFuture.runAsync(() -> {
                     List<String> result = instance.searchResult(currentTask);
                     System.out.println(currentTask);
-                    if (!result.isEmpty()) {
-                        listModel.removeAllElements();
-                        result.forEach(listModel::addElement);
-                    }
+                    addInResultList(result);
                     while (waitingTask != null) {
                         if(waitingTask.equals(currentTask)){
                             waitingTask = null;
@@ -139,10 +171,7 @@ public class DecoratedFrame extends JFrame {
                         result = instance.searchResult(currentTask);
                         currentTask = null;
                         waitingTask = null;
-                        if (!result.isEmpty()) {
-                            listModel.removeAllElements();
-                            result.forEach(listModel::addElement);
-                        }
+                        addInResultList(result);
                     }
                     runningFuture = null;
                 });
@@ -200,6 +229,7 @@ public class DecoratedFrame extends JFrame {
         this.setUndecorated(true); // 去掉窗口的装饰
         this.getRootPane().setWindowDecorationStyle(JRootPane.NONE);  //采用指定的窗口装饰风格
         this.setSize(800, 300);
+
 
     }
 
