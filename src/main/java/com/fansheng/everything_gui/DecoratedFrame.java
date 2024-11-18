@@ -42,6 +42,10 @@ public class DecoratedFrame extends JFrame {
 
     private volatile String waitingTask = null;
 
+    private volatile String currentTask = null;
+
+
+
     public void setHotkeyListener(HotkeyListener hotkeyListener) {
         this.hotkeyListener = hotkeyListener;
     }
@@ -104,28 +108,36 @@ public class DecoratedFrame extends JFrame {
                 }
                 if (runningFuture != null) {
                     try {
+                        if(e.getDocument().getText(0, e.getDocument().getLength()).equals(currentTask)){
+                            return;
+                        }
                         waitingTask = e.getDocument().getText(0, e.getDocument().getLength());
                     } catch (BadLocationException ex) {
                         throw new RuntimeException(ex);
-                    } finally {
-                        return;
                     }
+                    return;
                 }
-
+                try {
+                    currentTask = e.getDocument().getText(0, e.getDocument().getLength());
+                } catch (BadLocationException ex) {
+                    throw new RuntimeException(ex);
+                }
                 runningFuture = CompletableFuture.runAsync(() -> {
-                    try {
-                        List<String> result = instance.searchResult(e.getDocument().getText(0, e.getDocument().getLength()));
-                        System.out.println(e.getDocument().getText(0, e.getDocument().getLength()));
-                        if (!result.isEmpty()) {
-                            listModel.removeAllElements();
-                            result.forEach(listModel::addElement);
-                        }
-                    } catch (BadLocationException ex) {
-                        throw new RuntimeException(ex);
+                    List<String> result = instance.searchResult(currentTask);
+                    System.out.println(currentTask);
+                    if (!result.isEmpty()) {
+                        listModel.removeAllElements();
+                        result.forEach(listModel::addElement);
                     }
                     while (waitingTask != null) {
-                        System.out.println(waitingTask);
-                        List<String> result = instance.searchResult(waitingTask);
+                        if(waitingTask.equals(currentTask)){
+                            waitingTask = null;
+                            return;
+                        }
+                        currentTask = waitingTask;
+                        System.out.println(currentTask);
+                        result = instance.searchResult(currentTask);
+                        currentTask = null;
                         waitingTask = null;
                         if (!result.isEmpty()) {
                             listModel.removeAllElements();

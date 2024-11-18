@@ -17,9 +17,6 @@ public class Main {
                     frame.setVisible(true);
                     break;
                 }
-                case 27: {
-                    frame.dispose();
-                }
             }
         };
 
