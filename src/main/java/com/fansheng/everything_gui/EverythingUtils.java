@@ -1,4 +1,4 @@
-package org.helixcs.everything4j;
+package com.fansheng.everything_gui;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;

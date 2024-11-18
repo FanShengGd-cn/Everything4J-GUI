@@ -1,11 +1,7 @@
-package org.helixcs.everything4j;
+package com.fansheng.everything_gui;
 
 import com.melloware.jintellitype.HotkeyListener;
-import com.melloware.jintellitype.JIntellitype;
 import com.melloware.jintellitype.JIntellitypeConstants;
-
-import javax.swing.*;
-import java.awt.*;
 
 /**
  * author fansheng
@@ -16,8 +12,8 @@ public class Main {
         DecoratedFrame frame = new DecoratedFrame();
         frame.setLocationRelativeTo(null);
         HotkeyListener hotkeyListener = i -> {
-            switch (i){
-                case 1 :{
+            switch (i) {
+                case 1: {
                     frame.setVisible(true);
                     break;
                 }
@@ -27,7 +23,7 @@ public class Main {
             }
         };
 
-        frame.getjIntellitype().registerHotKey(1, JIntellitypeConstants.MOD_ALT,32);
+        frame.getjIntellitype().registerHotKey(1, JIntellitypeConstants.MOD_ALT, 32);
         frame.getjIntellitype().addHotKeyListener(hotkeyListener);
         frame.setHotkeyListener(hotkeyListener);
     }

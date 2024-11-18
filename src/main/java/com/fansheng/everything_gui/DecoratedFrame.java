@@ -1,8 +1,7 @@
-package org.helixcs.everything4j;
+package com.fansheng.everything_gui;
 
 import com.melloware.jintellitype.HotkeyListener;
 import com.melloware.jintellitype.JIntellitype;
-import com.melloware.jintellitype.JIntellitypeConstants;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -13,11 +12,8 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * author fansheng
@@ -30,15 +26,7 @@ public class DecoratedFrame extends JFrame {
 
     private JTextField jTextField;
 
-    private DefaultListModel<String> listModel = new DefaultListModel<>();;
-
-    public JTextField getjTextField() {
-        return jTextField;
-    }
-
-    public JList<String> getResultList() {
-        return resultList;
-    }
+    private DefaultListModel<String> listModel = new DefaultListModel<>();
 
     private Container container = this.getContentPane();
 
@@ -50,13 +38,9 @@ public class DecoratedFrame extends JFrame {
 
     private final Everything4j instance = Everything4j.getInstance();
 
-    private CompletableFuture<Void> runningFuture = null;
+    private volatile CompletableFuture<Void> runningFuture = null;
 
-    private String waittingTask = null;
-
-    public HotkeyListener getHotkeyListener() {
-        return hotkeyListener;
-    }
+    private volatile String waitingTask = null;
 
     public void setHotkeyListener(HotkeyListener hotkeyListener) {
         this.hotkeyListener = hotkeyListener;
@@ -72,27 +56,27 @@ public class DecoratedFrame extends JFrame {
             System.out.println(e.getKeyCode());
             Component focusedComponent = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
             switch (e.getKeyCode()) {
-                case 40:{
+                case 40: {
                     // 下箭头
-                    if(focusedComponent  == jTextField) {
+                    if (focusedComponent == jTextField) {
                         resultList.setSelectedIndex(0);
                         SwingUtilities.invokeLater(resultList::requestFocusInWindow);
                     }
                     break;
                 }
-                case 38:{
+                case 38: {
                     // 上箭头
-                    if(focusedComponent  == resultList && resultList.getSelectedIndex() == 0) {
+                    if (focusedComponent == resultList && resultList.getSelectedIndex() == 0) {
                         SwingUtilities.invokeLater(jTextField::requestFocusInWindow);
                     }
                     break;
                 }
-                case 27:{
+                case 27: {
                     // esc 关闭窗口
                     JFrame ancestor = (JFrame) SwingUtilities.getWindowAncestor(e.getComponent());
                     ancestor.dispose();
                 }
-                case 10:{
+                case 10: {
                     // 回车键 控制台启动选择项
                     break;
                 }
@@ -114,13 +98,13 @@ public class DecoratedFrame extends JFrame {
                 changedUpdate(e);
             }
 
-            public void changedUpdate(DocumentEvent e) {
+            public synchronized void changedUpdate(DocumentEvent e) {
                 if (e.getDocument().getLength() == 0) {
                     return;
                 }
                 if (runningFuture != null) {
                     try {
-                        waittingTask = e.getDocument().getText(0, e.getDocument().getLength());
+                        waitingTask = e.getDocument().getText(0, e.getDocument().getLength());
                     } catch (BadLocationException ex) {
                         throw new RuntimeException(ex);
                     } finally {
@@ -132,18 +116,18 @@ public class DecoratedFrame extends JFrame {
                     try {
                         List<String> result = instance.searchResult(e.getDocument().getText(0, e.getDocument().getLength()));
                         System.out.println(e.getDocument().getText(0, e.getDocument().getLength()));
-                        if(!result.isEmpty()) {
+                        if (!result.isEmpty()) {
                             listModel.removeAllElements();
                             result.forEach(listModel::addElement);
                         }
                     } catch (BadLocationException ex) {
                         throw new RuntimeException(ex);
                     }
-                    while(waittingTask != null) {
-                        System.out.println(waittingTask);
-                        List<String> result = instance.searchResult(waittingTask);
-                        waittingTask = null;
-                        if(!result.isEmpty()) {
+                    while (waitingTask != null) {
+                        System.out.println(waitingTask);
+                        List<String> result = instance.searchResult(waitingTask);
+                        waitingTask = null;
+                        if (!result.isEmpty()) {
                             listModel.removeAllElements();
                             result.forEach(listModel::addElement);
                         }

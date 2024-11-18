@@ -1,4 +1,4 @@
-package org.helixcs.everything4j;
+package com.fansheng.everything_gui;
 
 import com.sun.jna.WString;
 
@@ -111,13 +111,6 @@ public final class Everything4j {
         public EverythingException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
             super(message, cause, enableSuppression, writableStackTrace);
         }
-    }
-
-    public static void main(String[] args) {
-        Everything4j instance = Everything4j.getInstance();
-        List<String> strings = instance.searchResult("fxm");
-        System.out.println(strings);
-
     }
 
 }
