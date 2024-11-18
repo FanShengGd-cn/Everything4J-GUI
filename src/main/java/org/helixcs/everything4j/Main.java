@@ -5,6 +5,7 @@ import com.melloware.jintellitype.JIntellitype;
 import com.melloware.jintellitype.JIntellitypeConstants;
 
 import javax.swing.*;
+import java.awt.*;
 
 /**
  * author fansheng
@@ -12,15 +13,22 @@ import javax.swing.*;
  */
 public class Main {
     public static void main(String[] args) {
-        JFrame frame = new DecoratedFrame();
+        DecoratedFrame frame = new DecoratedFrame();
         frame.setLocationRelativeTo(null);
-        JIntellitype jIntellitype = JIntellitype.getInstance();
-        jIntellitype.registerHotKey(1, JIntellitypeConstants.MOD_ALT,32);
-        jIntellitype.addHotKeyListener(new HotkeyListener() {
-            @Override
-            public void onHotKey(int i) {
-                frame.setVisible(true);
+        HotkeyListener hotkeyListener = i -> {
+            switch (i){
+                case 1 :{
+                    frame.setVisible(true);
+                    break;
+                }
+                case 27: {
+                    frame.dispose();
+                }
             }
-        });
+        };
+
+        frame.getjIntellitype().registerHotKey(1, JIntellitypeConstants.MOD_ALT,32);
+        frame.getjIntellitype().addHotKeyListener(hotkeyListener);
+        frame.setHotkeyListener(hotkeyListener);
     }
 }

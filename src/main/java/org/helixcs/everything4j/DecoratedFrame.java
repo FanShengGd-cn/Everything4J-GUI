@@ -3,68 +3,208 @@ package org.helixcs.everything4j;
 import com.melloware.jintellitype.HotkeyListener;
 import com.melloware.jintellitype.JIntellitype;
 import com.melloware.jintellitype.JIntellitypeConstants;
-import org.helixcs.everything4j.Everything4j;
-import sun.jvm.hotspot.ui.ObjectHistogramPanel;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
-import javax.swing.plaf.TextUI;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * author fansheng
  * date 2024-11-18 01:20
  */
+
 public class DecoratedFrame extends JFrame {
+
+    private JList<String> resultList;
+
+    private JTextField jTextField;
+
+    private DefaultListModel<String> listModel = new DefaultListModel<>();;
+
+    public JTextField getjTextField() {
+        return jTextField;
+    }
+
+    public JList<String> getResultList() {
+        return resultList;
+    }
+
+    private Container container = this.getContentPane();
+
+    private boolean isFirst = true;
+
+    private HotkeyListener hotkeyListener;
+
+    private final JIntellitype jIntellitype = JIntellitype.getInstance();
+
+    private final Everything4j instance = Everything4j.getInstance();
+
+    private CompletableFuture<Void> runningFuture = null;
+
+    private String waittingTask = null;
+
+    public HotkeyListener getHotkeyListener() {
+        return hotkeyListener;
+    }
+
+    public void setHotkeyListener(HotkeyListener hotkeyListener) {
+        this.hotkeyListener = hotkeyListener;
+    }
+
+    public JIntellitype getjIntellitype() {
+        return jIntellitype;
+    }
+
+    private KeyAdapter keyAdapter = new KeyAdapter() {
+        @Override
+        public void keyPressed(KeyEvent e) {
+            System.out.println(e.getKeyCode());
+            Component focusedComponent = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+            switch (e.getKeyCode()) {
+                case 40:{
+                    // 下箭头
+                    if(focusedComponent  == jTextField) {
+                        resultList.setSelectedIndex(0);
+                        SwingUtilities.invokeLater(resultList::requestFocusInWindow);
+                    }
+                    break;
+                }
+                case 38:{
+                    // 上箭头
+                    if(focusedComponent  == resultList && resultList.getSelectedIndex() == 0) {
+                        SwingUtilities.invokeLater(jTextField::requestFocusInWindow);
+                    }
+                    break;
+                }
+                case 27:{
+                    // esc 关闭窗口
+                    JFrame ancestor = (JFrame) SwingUtilities.getWindowAncestor(e.getComponent());
+                    ancestor.dispose();
+                }
+                case 10:{
+                    // 回车键 控制台启动选择项
+                    break;
+                }
+            }
+        }
+    };
+
     public DecoratedFrame() {
-        JTextField jTextField = new JTextField("此处键入搜索内容",1);
-        jTextField.setFont(new Font("SansSerif",Font.PLAIN,35));
+        jTextField = new JTextField("", 1);
+        jTextField.setFont(new Font("黑体", Font.PLAIN, 30));
+        jTextField.addKeyListener(keyAdapter);
         Document dt = jTextField.getDocument();
-        dt.addDocumentListener(new javax.swing.event.DocumentListener(){
+        dt.addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(DocumentEvent e) {
                 changedUpdate(e);
             }
+
             public void removeUpdate(DocumentEvent e) {
                 changedUpdate(e);
             }
+
             public void changedUpdate(DocumentEvent e) {
-                System.out.println("changedUpdate");
-                Everything4j instance = Everything4j.getInstance();
-                List<String> strings = null;
-                try {
-                    strings = instance.searchResult(e.getDocument().getText(0,e.getDocument().getLength()));
-                } catch (BadLocationException ex) {
-                    throw new RuntimeException(ex);
+                if (e.getDocument().getLength() == 0) {
+                    return;
                 }
-                System.out.println(strings);
+                if (runningFuture != null) {
+                    try {
+                        waittingTask = e.getDocument().getText(0, e.getDocument().getLength());
+                    } catch (BadLocationException ex) {
+                        throw new RuntimeException(ex);
+                    } finally {
+                        return;
+                    }
+                }
+
+                runningFuture = CompletableFuture.runAsync(() -> {
+                    try {
+                        List<String> result = instance.searchResult(e.getDocument().getText(0, e.getDocument().getLength()));
+                        System.out.println(e.getDocument().getText(0, e.getDocument().getLength()));
+                        if(!result.isEmpty()) {
+                            listModel.removeAllElements();
+                            result.forEach(listModel::addElement);
+                        }
+                    } catch (BadLocationException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                    while(waittingTask != null) {
+                        System.out.println(waittingTask);
+                        List<String> result = instance.searchResult(waittingTask);
+                        waittingTask = null;
+                        if(!result.isEmpty()) {
+                            listModel.removeAllElements();
+                            result.forEach(listModel::addElement);
+                        }
+                    }
+                    runningFuture = null;
+                });
             }
         });
-        this.getContentPane().add(jTextField);
+        this.addWindowListener(new WindowListener() {
+            @Override
+            public void windowOpened(WindowEvent e) {
+                jIntellitype.removeHotKeyListener(hotkeyListener);
+            }
+
+            @Override
+            public void windowClosing(WindowEvent e) {
+            }
+
+            @Override
+            public void windowClosed(WindowEvent e) {
+                jIntellitype.addHotKeyListener(hotkeyListener);
+            }
+
+            @Override
+            public void windowIconified(WindowEvent e) {
+            }
+
+            @Override
+            public void windowDeiconified(WindowEvent e) {
+            }
+
+            @Override
+            public void windowActivated(WindowEvent e) {
+                if (isFirst) {
+                    isFirst = false;
+                    try {
+                        jTextField.getDocument().remove(0, jTextField.getDocument().getLength());
+                    } catch (BadLocationException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+            }
+
+            @Override
+            public void windowDeactivated(WindowEvent e) {
+            }
+        });
+        this.setLayout(new BorderLayout());
+        jTextField.setPreferredSize(new Dimension(800, 50));
+        container.add(jTextField, BorderLayout.NORTH);
+        resultList = new JList<>(listModel);
+        JScrollPane scrollPane = new JScrollPane(resultList);
+        resultList.setFixedCellHeight(30); // 每个搜索项高度
+        resultList.setFixedCellWidth(600); // 每个搜索项宽度（可选）
+        resultList.setFont(new Font("黑体", Font.PLAIN, 20));
+        resultList.addKeyListener(keyAdapter);
+        this.add(scrollPane, BorderLayout.CENTER);
         this.setUndecorated(true); // 去掉窗口的装饰
         this.getRootPane().setWindowDecorationStyle(JRootPane.NONE);  //采用指定的窗口装饰风格
-        this.setSize(800, 50);
-    }
-
-
-
-    public static void main(String[] args) {
-        Everything4j instance = Everything4j.getInstance();
-        JFrame frame = new DecoratedFrame();
-        frame.setLocationRelativeTo(null);
-
-        JIntellitype jIntellitype = JIntellitype.getInstance();
-        jIntellitype.registerHotKey(1, JIntellitypeConstants.MOD_ALT,32);
-        jIntellitype.addHotKeyListener(i -> {
-            frame.setVisible(true);
-        });
-
-
-//        jIntellitype.removeHotKeyListener();
-
+        this.setSize(800, 300);
 
     }
+
 }
