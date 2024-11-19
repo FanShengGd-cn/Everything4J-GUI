@@ -14,7 +14,11 @@ import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.io.File;
 import java.io.IOException;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -23,7 +27,10 @@ import java.util.concurrent.CompletableFuture;
  */
 
 public class DecoratedFrame extends JFrame {
+    private Statement statement;
+
     public static final Desktop desktop = Desktop.getDesktop();
+
     public static final String SPLIT_SPACE = "     ";
 
     private ProcessBuilder pb = new ProcessBuilder();
@@ -49,8 +56,6 @@ public class DecoratedFrame extends JFrame {
     private volatile String waitingTask = null;
 
     private volatile String currentTask = null;
-
-
 
     public void setHotkeyListener(HotkeyListener hotkeyListener) {
         this.hotkeyListener = hotkeyListener;
@@ -97,7 +102,21 @@ public class DecoratedFrame extends JFrame {
                     // 回车键 控制台启动选择项
 //                    System.out.println(listModel.get(resultList.getSelectedIndex()));
                     try {
-                        desktop.open(new File(((String)listModel.get(resultList.getSelectedIndex())).split(SPLIT_SPACE)[1]));
+                        String path = ((String) listModel.get(resultList.getSelectedIndex())).split(SPLIT_SPACE)[1];
+                        CompletableFuture.runAsync(() -> {
+                            try {
+                                ResultSet result = statement.executeQuery("select count(*) from files where path = '" + path + "'");
+                                if (result.next() && result.getInt(1) == 0) {
+                                    // 数据库中不存在该数据
+                                    statement.executeUpdate("insert into files values( '" + path + "',1)");
+                                } else {
+                                    statement.executeUpdate("update files set times = times + 1 where path = '" + path + "'");
+                                }
+                            } catch (SQLException ex) {
+                                throw new RuntimeException(ex);
+                            }
+                        });
+                        desktop.open(new File(path));
                     } catch (IOException ex) {
                         throw new RuntimeException(ex);
                     }
@@ -106,15 +125,16 @@ public class DecoratedFrame extends JFrame {
             }
         }
     };
-    private void addInResultList(List<String> result){
+
+    private void addInResultList(List<String> result) {
         if (!result.isEmpty()) {
             listModel.removeAllElements();
-            result.parallelStream().forEach(x->{
+            result.forEach(x -> {
                 String[] split = x.split("\\\\");
                 String content;
-                if(split.length > 1){
-                    content = split[split.length-1];
-                }else{
+                if (split.length > 1) {
+                    content = split[split.length - 1];
+                } else {
                     content = x;
                 }
                 listModel.addElement(content + SPLIT_SPACE + x);
@@ -123,7 +143,73 @@ public class DecoratedFrame extends JFrame {
         }
     }
 
+    /**
+     * 数据库初始化
+     */
+    private void initDataSource() throws ClassNotFoundException, SQLException {
+        Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+        Connection con = DriverManager.getConnection("jdbc:derby:fileData;create=true");
+        statement = con.createStatement();
+        ResultSet execute = statement.executeQuery("SELECT COUNT(*) FROM SYS.SYSTABLES T JOIN SYS.SYSSCHEMAS S ON T.SCHEMAID = S.SCHEMAID WHERE T.TABLENAME = 'FILES'");
+        if (execute.next() && execute.getInt(1) == 0) {
+            // 需要建表
+            statement.execute("create table FILES( path varchar(1024), times int)");
+        }
+    }
+
+    private List<String> searchInDatabase(String str) {
+        ResultSet resultSet = null;
+        List<String> list = new ArrayList<>();
+        try {
+            resultSet = statement.executeQuery("select * from FILES where path like '%"+str+"%' order by times asc");
+            while (resultSet.next()) {
+                list.add(resultSet.getString("path"));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return list;
+    }
+
+    public static void main(String[] args) throws ClassNotFoundException, SQLException {
+        Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+        Connection con = DriverManager.getConnection("jdbc:derby:fileData;create=true");
+        Statement statement = con.createStatement();
+        ResultSet execute = statement.executeQuery("SELECT COUNT(*) FROM SYS.SYSTABLES T JOIN SYS.SYSSCHEMAS S ON T.SCHEMAID = S.SCHEMAID WHERE T.TABLENAME = 'FILES'");
+        if (execute.next() && execute.getInt(1) == 0) {
+            // 需要建表
+            statement.execute("create table FILES( path varchar(1024), times int)");
+        } else {
+            statement.execute("drop table files");
+            statement.execute("create table FILES( path varchar(1024), times int)");
+//            ResultSet resultSet = statement.executeQuery("select * from files where path like '%xxxxx%' order by times asc");
+//            while (resultSet.next()) {
+//                System.out.println(resultSet.getString("path"));
+//            }
+        }
+    }
+
+    public List<String> getSearchResult(String str) {
+        List<String> result = instance.searchResult(str);
+        List<String> strings = searchInDatabase(str);
+        for (String string : strings) {
+            if (result.contains(string)) {
+                result.remove(string);
+                result.add(0, string);
+            }
+        }
+        return result;
+    }
+
+
     public DecoratedFrame() {
+        try {
+            initDataSource();
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         jTextField = new JTextField("", 1);
         jTextField.setFont(new Font("黑体", Font.PLAIN, 30));
         jTextField.addKeyListener(keyAdapter);
@@ -143,7 +229,7 @@ public class DecoratedFrame extends JFrame {
                 }
                 if (runningFuture != null) {
                     try {
-                        if(e.getDocument().getText(0, e.getDocument().getLength()).equals(currentTask)){
+                        if (e.getDocument().getText(0, e.getDocument().getLength()).equals(currentTask)) {
                             return;
                         }
                         waitingTask = e.getDocument().getText(0, e.getDocument().getLength());
@@ -158,17 +244,17 @@ public class DecoratedFrame extends JFrame {
                     throw new RuntimeException(ex);
                 }
                 runningFuture = CompletableFuture.runAsync(() -> {
-                    List<String> result = instance.searchResult(currentTask);
+                    List<String> result = getSearchResult(currentTask);
                     System.out.println(currentTask);
                     addInResultList(result);
                     while (waitingTask != null) {
-                        if(waitingTask.equals(currentTask)){
+                        if (waitingTask.equals(currentTask)) {
                             waitingTask = null;
                             return;
                         }
                         currentTask = waitingTask;
                         System.out.println(currentTask);
-                        result = instance.searchResult(currentTask);
+                        result = getSearchResult(currentTask);
                         currentTask = null;
                         waitingTask = null;
                         addInResultList(result);

@@ -2,6 +2,9 @@ package com.fansheng.everything_gui;
 
 import com.sun.jna.WString;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.CharBuffer;
 import java.util.ArrayList;
@@ -17,11 +20,41 @@ public final class Everything4j {
 
     private static final int BUFFER_LEN = 260;
 
+    public static String loadDllFromResources(String resourcePath) throws Exception {
+        // 获取 .dll 文件的 InputStream
+        InputStream inputStream = Everything4j.class.getClassLoader().getResourceAsStream(resourcePath);
+        if (inputStream == null) {
+            throw new RuntimeException("Unable to find resource: " + resourcePath);
+        }
+
+        // 创建临时文件
+        File tempFile = File.createTempFile("temp-dll-", ".dll");
+        tempFile.deleteOnExit(); // JVM 退出时删除临时文件
+
+        // 将 InputStream 写入临时文件
+        try (FileOutputStream outputStream = new FileOutputStream(tempFile)) {
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+        }
+
+        return tempFile.getAbsolutePath();
+    }
+
     static {
-        if (EverythingUtils.JDK64BIT == EverythingUtils.currentJDKBit()) {
-            everythingNative = EverythingUtils.makeDllInstance("Everything64.dll", EverythingNative.class);
-        } else if (EverythingUtils.JDK32BIT == EverythingUtils.currentJDKBit()) {
-            everythingNative = EverythingUtils.makeDllInstance("Everything32.dll", EverythingNative.class);
+        try {
+            if (EverythingUtils.JDK64BIT == EverythingUtils.currentJDKBit()) {
+                // 从 resources 加载 DLL
+                String dllPath = loadDllFromResources("Everything64.dll");
+                everythingNative = EverythingUtils.makeDllInstance(dllPath, EverythingNative.class);
+            } else if (EverythingUtils.JDK32BIT == EverythingUtils.currentJDKBit()) {
+                String dllPath = loadDllFromResources("Everything32.dll");
+                everythingNative = EverythingUtils.makeDllInstance(dllPath, EverythingNative.class);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
